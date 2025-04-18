@@ -5,99 +5,126 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { ArrowLeft } from "lucide-react"
 
 export default function AdminResetPassword() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const token = searchParams.get("token") || ""
-
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [isVerifying, setIsVerifying] = useState(true)
-  const [isResetting, setIsResetting] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
-  const [adminEmail, setAdminEmail] = useState("")
+  const [isValidToken, setIsValidToken] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(true)
+
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const token = searchParams?.get("token")
 
   useEffect(() => {
     if (!token) {
-      setError("Invalid reset link")
+      setError("Invalid reset token")
       setIsVerifying(false)
       return
     }
 
-    // In a real app, you would verify the token with your backend
-    // For this demo, we'll simulate token verification
-    setTimeout(() => {
-      // Simulate a valid token for demo purposes
-      setAdminEmail("primaveradvm@gmail.com")
-      setIsVerifying(false)
-    }, 1000)
+    const verifyToken = async () => {
+      try {
+        const response = await fetch(`/api/admin/verify-reset-token?token=${token}`)
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || "Invalid or expired token")
+        }
+
+        setIsValidToken(true)
+      } catch (err: any) {
+        console.error("Token verification error:", err)
+        setError(err.message || "Invalid or expired token")
+      } finally {
+        setIsVerifying(false)
+      }
+    }
+
+    verifyToken()
   }, [token])
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
+    setError("")
 
     if (password !== confirmPassword) {
       setError("Passwords do not match")
+      setIsLoading(false)
       return
     }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters")
-      return
-    }
-
-    setIsResetting(true)
-    setError("")
 
     try {
-      // In a real app, you would send the new password to your backend
-      // For this demo, we'll simulate a successful password reset
+      const response = await fetch("/api/admin/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token, password }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Something went wrong")
+      }
+
+      setSuccess(true)
+
+      // Redirect to login after 3 seconds
       setTimeout(() => {
-        setSuccess(true)
-        setIsResetting(false)
-      }, 1000)
-    } catch (err) {
+        router.push("/admin/login")
+      }, 3000)
+    } catch (err: any) {
       console.error("Password reset error:", err)
-      setError("An error occurred")
-      setIsResetting(false)
+      setError(err.message || "An error occurred")
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  if (isVerifying) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white mb-4"></div>
+          <p>Verifying reset token...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-6">Reset Admin Password</h1>
+        <div className="flex items-center mb-6">
+          <Link href="/admin/login" className="mr-4">
+            <ArrowLeft size={20} />
+          </Link>
+          <h1 className="text-2xl font-bold">Reset Admin Password</h1>
+        </div>
 
-        {isVerifying ? (
-          <p>Verifying reset link...</p>
-        ) : error && !adminEmail ? (
-          <div className="space-y-6">
-            <div className="bg-red-900/30 border border-red-700 p-4 rounded-sm">
-              <p>{error}</p>
+        {!isValidToken ? (
+          <div className="bg-red-500/20 border border-red-500 text-red-200 px-4 py-2 rounded">
+            <p>{error || "Invalid or expired reset token"}</p>
+            <div className="mt-4">
+              <Link href="/admin/forgot-password" className="text-blue-400 hover:underline">
+                Request a new password reset
+              </Link>
             </div>
-            <Link href="/admin/login" className="block text-center px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-sm">
-              Back to Login
-            </Link>
           </div>
         ) : success ? (
-          <div className="space-y-6">
-            <div className="bg-green-900/30 border border-green-700 p-4 rounded-sm">
-              <p>Your password has been successfully reset.</p>
-            </div>
-            <Link href="/admin/login" className="block text-center px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-sm">
-              Go to Login
-            </Link>
+          <div className="bg-green-500/20 border border-green-500 text-green-200 px-4 py-2 rounded">
+            <p>Password has been reset successfully!</p>
+            <p className="mt-2 text-sm">Redirecting to login page...</p>
           </div>
         ) : (
-          <form onSubmit={handleResetPassword} className="space-y-6">
-            <div className="bg-gray-900/50 p-4 rounded-sm mb-4">
-              <p>
-                Resetting password for <span className="font-medium">{adminEmail}</span>
-              </p>
-            </div>
-
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label htmlFor="password" className="block text-sm">
                 New Password
@@ -109,7 +136,7 @@ export default function AdminResetPassword() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-3 py-2 bg-transparent border border-gray-700 rounded-sm text-white"
                 required
-                minLength={8}
+                minLength={6}
               />
             </div>
 
@@ -124,22 +151,19 @@ export default function AdminResetPassword() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full px-3 py-2 bg-transparent border border-gray-700 rounded-sm text-white"
                 required
-                minLength={8}
+                minLength={6}
               />
             </div>
 
             {error && <div className="text-red-500 text-sm">{error}</div>}
 
-            <div className="flex justify-end space-x-4">
-              <Link href="/admin/login" className="px-4 py-2 bg-transparent hover:underline">
-                Cancel
-              </Link>
+            <div className="flex justify-end">
               <button
                 type="submit"
-                disabled={isResetting}
+                disabled={isLoading}
                 className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-sm"
               >
-                {isResetting ? "Resetting..." : "Reset Password"}
+                {isLoading ? "Resetting..." : "Reset Password"}
               </button>
             </div>
           </form>

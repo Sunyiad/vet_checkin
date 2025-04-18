@@ -42,9 +42,10 @@ export default function DoctorsPage() {
 
       const clinic = JSON.parse(clinicData)
 
+      // Select only the fields we need
       const { data, error } = await supabase
         .from("doctors")
-        .select("*")
+        .select("id, name, active, created_at")
         .eq("clinic_id", clinic.id)
         .order("created_at", { ascending: true })
 

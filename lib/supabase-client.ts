@@ -1,34 +1,19 @@
-import { createClient } from "@supabase/supabase-js"
-import type { Database } from "./database.types"
+// Add this function to check database connection more efficiently
+export async function checkDatabaseConnection() {
+  try {
+    const supabase = createServerSupabaseClient()
 
-// For client-side usage (with auth)
-let supabaseClient: ReturnType<typeof createClientWithAuth>
+    // Use a simple, efficient query that doesn't parse complex parameters
+    const { data, error } = await supabase.from("pg_stat_database").select("1").limit(1)
 
-function createClientWithAuth() {
-  return createClient<Database>(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
-}
+    if (error) {
+      console.error("Database connection check failed:", error.message)
+      return false
+    }
 
-// Get the client on the client-side (singleton pattern)
-export function getSupabaseClient() {
-  if (typeof window === "undefined") {
-    // Server-side - create a new client
-    return createClientWithAuth()
+    return true
+  } catch (error) {
+    console.error("Database connection check error:", error)
+    return false
   }
-
-  // Client-side - reuse the client
-  if (!supabaseClient) {
-    supabaseClient = createClientWithAuth()
-  }
-
-  return supabaseClient
-}
-
-// For server-side usage (with service role)
-export function getSupabaseAdmin() {
-  return createClient<Database>(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
 }

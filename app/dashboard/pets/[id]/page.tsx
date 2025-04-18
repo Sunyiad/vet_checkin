@@ -32,6 +32,8 @@ interface Pet {
   medication_details: string | null
   supplement_details: string | null
   cancelled: boolean
+  cancelled_doctor?: string | null
+  cancelled_at?: string | null
 }
 
 export default function PetDetailsPage() {
@@ -56,14 +58,38 @@ export default function PetDetailsPage() {
     try {
       const supabase = createClientSupabaseClient()
 
+      // Select only the fields we need
       const { data, error } = await supabase
         .from("pets")
         .select(`
-          *,
-          doctor:doctor_id (
-            name
-          )
-        `)
+        id,
+        owner_name,
+        pet_name,
+        species,
+        is_sick,
+        sick_appointment,
+        general_info,
+        coughing,
+        sneezing,
+        vomiting,
+        diarrhea,
+        status,
+        doctor_id,
+        diet_info,
+        prevention_type,
+        discuss_risks,
+        recent_vet_clinic,
+        recent_vet_reason,
+        records_permission,
+        medication_details,
+        supplement_details,
+        cancelled,
+        cancelled_doctor,
+        cancelled_at,
+        doctor:doctor_id (
+          name
+        )
+      `)
         .eq("id", petId)
         .single()
 

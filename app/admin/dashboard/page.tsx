@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { createClientSupabaseClient } from "@/lib/supabase"
 import { RefreshCw, Edit, Trash2, Plus, Info, X, Check } from "lucide-react"
 
 interface Clinic {
@@ -69,17 +70,15 @@ export default function AdminDashboard() {
   const fetchClinics = async () => {
     try {
       setLoading(true)
+      const supabase = createClientSupabaseClient()
 
-      // Use the API route instead of direct Supabase client
-      const response = await fetch("/api/admin/fetch-clinics")
+      const { data, error } = await supabase.from("clinics").select("*").order("email", { ascending: true })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error("Error fetching clinics:", errorData)
+      if (error) {
+        console.error("Error fetching clinics:", error)
         return
       }
 
-      const data = await response.json()
       setClinics(data || [])
 
       // Fetch stats for each clinic
@@ -94,24 +93,52 @@ export default function AdminDashboard() {
 
   const fetchClinicStats = async (clinicId: string) => {
     try {
-      const response = await fetch(`/api/admin/clinic-stats?clinicId=${clinicId}`)
+      const supabase = createClientSupabaseClient()
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error("Error fetching clinic stats:", errorData)
-        return
-      }
+      // Get total pets count
+      const { count: totalPets } = await supabase
+        .from("pets")
+        .select("*", { count: "exact", head: true })
+        .eq("clinic_id", clinicId)
 
-      const stats = await response.json()
+      // Get active pets count
+      const { count: activePets } = await supabase
+        .from("pets")
+        .select("*", { count: "exact", head: true })
+        .eq("clinic_id", clinicId)
+        .eq("status", "active")
+
+      // Get doctors count
+      const { count: doctorsCount } = await supabase
+        .from("doctors")
+        .select("*", { count: "exact", head: true })
+        .eq("clinic_id", clinicId)
+
+      // Get active doctors count
+      const { count: activeDoctors } = await supabase
+        .from("doctors")
+        .select("*", { count: "exact", head: true })
+        .eq("clinic_id", clinicId)
+        .eq("active", true)
+
+      // Get pets checked in today
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const { count: petsToday } = await supabase
+        .from("pets")
+        .select("*", { count: "exact", head: true })
+        .eq("clinic_id", clinicId)
+        .gte("created_at", today.toISOString())
 
       setClinicStats((prev) => ({
         ...prev,
         [clinicId]: {
-          totalPets: stats.totalPets || 0,
-          activePets: stats.activePets || 0,
-          doctorsCount: stats.doctorsCount || 0,
-          activeDoctors: stats.activeDoctors || 0,
-          petsToday: stats.petsToday || 0,
+          totalPets: totalPets || 0,
+          activePets: activePets || 0,
+          doctorsCount: doctorsCount || 0,
+          activeDoctors: activeDoctors || 0,
+          petsToday: petsToday || 0,
         },
       }))
     } catch (error) {
@@ -119,7 +146,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Updated handleGenerateCode function to use the API route
   const handleGenerateCode = async () => {
     if (!newClinicName.trim() || !newClinicEmail.trim()) {
       setCodeError("Clinic name and email are required")
@@ -129,32 +155,42 @@ export default function AdminDashboard() {
     try {
       setGeneratingCode(true)
       setCodeError("")
+      const supabase = createClientSupabaseClient()
 
-      // Get admin email from localStorage
-      const admin = JSON.parse(localStorage.getItem("admin") || "{}")
-      const adminEmail = admin.email || "admin"
+      // Check if clinic already exists
+      const { data: existingClinic } = await supabase.from("clinics").select("id").eq("email", newClinicEmail).limit(1)
 
-      // Use the API route instead of direct Supabase client
-      const response = await fetch("/api/admin/generate-signup-code", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clinicName: newClinicName,
-          clinicEmail: newClinicEmail,
-          adminEmail,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        setCodeError(errorData.error || "Failed to generate code")
+      if (existingClinic && existingClinic.length > 0) {
+        setCodeError("A clinic with this email already exists")
         return
       }
 
-      const data = await response.json()
-      setGeneratedCode(data.code)
+      // Generate a random code
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+
+      // Set expiration to 24 hours from now
+      const expiresAt = new Date()
+      expiresAt.setHours(expiresAt.getHours() + 24)
+
+      // Get admin email
+      const admin = JSON.parse(localStorage.getItem("admin") || "{}")
+
+      // Insert the code
+      const { error } = await supabase.from("clinic_signup_codes").insert({
+        code,
+        clinic_name: newClinicName,
+        clinic_email: newClinicEmail,
+        expires_at: expiresAt.toISOString(),
+        created_by: admin.email || "admin",
+      })
+
+      if (error) {
+        console.error("Error generating code:", error)
+        setCodeError("Failed to generate code")
+        return
+      }
+
+      setGeneratedCode(code)
 
       // In a real app, you would send an email to the clinic with the signup link
       // For this demo, we'll just display the code
@@ -184,18 +220,24 @@ export default function AdminDashboard() {
     if (!editingClinic) return
 
     try {
-      // Use the API route for updating clinic
-      const response = await fetch(`/api/admin/update-clinic/${editingClinic.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(editForm),
-      })
+      const supabase = createClientSupabaseClient()
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error("Error updating clinic:", errorData)
+      const { error } = await supabase
+        .from("clinics")
+        .update({
+          email: editForm.email,
+          name: editForm.name,
+          contact_person: editForm.contact_person,
+          address: editForm.address,
+          city: editForm.city,
+          state: editForm.state,
+          zip: editForm.zip,
+          phone: editForm.phone,
+        })
+        .eq("id", editingClinic.id)
+
+      if (error) {
+        console.error("Error updating clinic:", error)
         return
       }
 
@@ -216,14 +258,48 @@ export default function AdminDashboard() {
     }
 
     try {
-      // Use the API route for deleting clinic
-      const response = await fetch(`/api/admin/delete-clinic/${clinicId}`, {
-        method: "DELETE",
-      })
+      const supabase = createClientSupabaseClient()
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error("Error deleting clinic:", errorData)
+      // First, delete all related records in the codes table
+      const { error: codesError } = await supabase.from("codes").delete().eq("clinic_id", clinicId)
+
+      if (codesError) {
+        console.error("Error deleting related codes:", codesError)
+        return
+      }
+
+      // Delete related records in the clinic_signup_codes table
+      const { error: signupCodesError } = await supabase
+        .from("clinic_signup_codes")
+        .delete()
+        .eq("clinic_email", clinics.find((c) => c.id === clinicId)?.email || "")
+
+      if (signupCodesError) {
+        console.error("Error deleting related signup codes:", signupCodesError)
+        // Continue anyway as this might not exist
+      }
+
+      // Delete related records in the doctors table
+      const { error: doctorsError } = await supabase.from("doctors").delete().eq("clinic_id", clinicId)
+
+      if (doctorsError) {
+        console.error("Error deleting related doctors:", doctorsError)
+        return
+      }
+
+      // Delete related records in the pets table
+      const { error: petsError } = await supabase.from("pets").delete().eq("clinic_id", clinicId)
+
+      if (petsError) {
+        console.error("Error deleting related pets:", petsError)
+        return
+      }
+
+      // Finally, delete the clinic
+      const { error } = await supabase.from("clinics").delete().eq("id", clinicId)
+
+      if (error) {
+        console.error("Error deleting clinic:", error)
         return
       }
 

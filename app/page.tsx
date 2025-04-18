@@ -56,6 +56,7 @@ export default function Home() {
     }
   }, [clinicId])
 
+  // Optimize the fetchDoctors function
   const fetchDoctors = async () => {
     try {
       const supabase = createClientSupabaseClient()
@@ -64,6 +65,7 @@ export default function Home() {
         return
       }
 
+      // Select only the fields we need
       const { data, error } = await supabase
         .from("doctors")
         .select("id, name")
@@ -82,6 +84,7 @@ export default function Home() {
     }
   }
 
+  // Optimize the verifyCode function
   const verifyCode = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsVerifying(true)
@@ -94,29 +97,25 @@ export default function Home() {
       const now = new Date().toISOString()
       const { data, error } = await supabase
         .from("codes")
-        .select("*")
+        .select("clinic_id")
         .eq("code", codeInput)
         .eq("active", true)
         .gt("expires_at", now)
         .limit(1)
+        .single()
 
       if (error) {
         console.error("Error verifying code:", error)
-        setCodeError("An error occurred while verifying the code")
-        return
-      }
-
-      if (!data || data.length === 0) {
         setCodeError("Invalid or expired code")
         return
       }
 
       // Code is valid
       setIsCodeVerified(true)
-      setClinicId(data[0].clinic_id)
+      setClinicId(data.clinic_id)
     } catch (error) {
       console.error("Error:", error)
-      setCodeError("An error occurred")
+      setCodeError("Invalid or expired code")
     } finally {
       setIsVerifying(false)
     }

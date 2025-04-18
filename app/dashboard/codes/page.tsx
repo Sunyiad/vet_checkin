@@ -31,6 +31,7 @@ export default function CodesPage() {
     fetchCodes()
   }, [router])
 
+  // Optimize the fetchCodes function
   const fetchCodes = async () => {
     try {
       const supabase = createClientSupabaseClient()
@@ -42,11 +43,13 @@ export default function CodesPage() {
 
       const clinic = JSON.parse(clinicData)
 
+      // Select only the fields we need
       const { data, error } = await supabase
         .from("codes")
-        .select("*")
+        .select("id, code, created_at, expires_at, active")
         .eq("clinic_id", clinic.id)
         .order("created_at", { ascending: false })
+        .limit(50) // Limit to recent codes for better performance
 
       if (error) {
         console.error("Error fetching codes:", error)
