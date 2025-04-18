@@ -1,41 +1,36 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 
-// Access the in-memory token store (in a real app, this would be a database)
-// This is just for demo purposes
-declare global {
-  var resetTokens: Record<string, { email: string; expires: Date }> | undefined
-}
-
-// Initialize if not exists
-if (!global.resetTokens) {
-  global.resetTokens = {}
-}
-
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const token = request.nextUrl.searchParams.get("token")
+    const url = new URL(request.url)
+    const token = url.searchParams.get("token")
 
     if (!token) {
       return NextResponse.json({ error: "Token is required" }, { status: 400 })
     }
 
-    // Check if token exists and is valid
-    const tokenData = global.resetTokens?.[token]
-
+    // Check if token exists in memory
+    const tokenData = global.adminResetTokens?.[token]
     if (!tokenData) {
       return NextResponse.json({ error: "Invalid token" }, { status: 400 })
     }
 
     // Check if token is expired
     if (new Date() > tokenData.expires) {
-      // Remove expired token
-      delete global.resetTokens[token]
+      delete global.adminResetTokens[token]
       return NextResponse.json({ error: "Token has expired" }, { status: 400 })
     }
 
+    // Return success response
     return NextResponse.json({ success: true, email: tokenData.email })
   } catch (error) {
     console.error("Verify reset token error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }
