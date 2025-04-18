@@ -1,5 +1,8 @@
 import { createClient } from "@supabase/supabase-js"
 
+// Re-export createClient for modules that need it
+export { createClient }
+
 // Create a single supabase client for server-side
 export const createServerSupabaseClient = () => {
   return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
