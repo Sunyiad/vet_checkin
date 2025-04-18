@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
-import { sendEmail } from "@vercel/email"
+import { Resend } from "resend"
+
+// Initialize the Resend client
+const resend = new Resend(process.env.RESEND_API_KEY)
 
 // Initialize in-memory token storage if it doesn't exist
 if (typeof global.adminResetTokens === "undefined") {
@@ -39,10 +42,10 @@ export async function POST(request: Request) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const resetLink = `${appUrl}/admin/reset-password?token=${token}`
 
-    // Send the email using Vercel Email
-    await sendEmail({
+    // Send the email using Resend
+    const { data, error: emailError } = await resend.emails.send({
+      from: "onboarding@resend.dev", // Use this for testing, change to your verified domain later
       to: email,
-      from: "noreply@yourdomain.com", // Replace with your verified domain
       subject: "Reset Your Admin Password",
       text: `
         Password Reset Request
@@ -77,6 +80,10 @@ export async function POST(request: Request) {
       `,
     })
 
+    if (emailError) {
+      throw new Error(emailError.message)
+    }
+
     // For development/demo purposes, still return the token
     // In production, you would remove this
     const isDevelopment = !process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_APP_URL.includes("localhost")
@@ -84,7 +91,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       message: "Password reset email sent successfully",
-      ...(isDevelopment ? { token } : {}),
+      ...(isDevelopment ? { token, emailId: data?.id } : {}),
     })
   } catch (error) {
     console.error("Admin forgot password error:", error)

@@ -48,6 +48,7 @@ export default function Home() {
   const [supplementDetails, setSupplementDetails] = useState("")
   const [appointmentConfirmation, setAppointmentConfirmation] = useState<boolean | null>(null)
   const [cancelled, setCancelled] = useState(false)
+  const [email, setEmail] = useState("")
 
   // Fetch doctors when clinic ID is set
   useEffect(() => {
@@ -217,6 +218,50 @@ export default function Home() {
         }
       }
 
+      // Send notification to the clinic
+      if (petResult && petResult.length > 0 && clinicId) {
+        try {
+          await fetch("/api/notify-clinic", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              petId: petResult[0].id,
+              clinicId,
+            }),
+          })
+        } catch (notifyError) {
+          console.error("Error notifying clinic:", notifyError)
+          // Continue with the flow even if notification fails
+        }
+      }
+
+      // Send confirmation email if we have an email address
+      if (email) {
+        try {
+          const emailResponse = await fetch("/api/send-checkin-confirmation", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ownerEmail: email,
+              ownerName,
+              petName,
+              doctorName: selectedDoctor ? selectedDoctor.name : null,
+            }),
+          })
+
+          if (!emailResponse.ok) {
+            console.error("Failed to send confirmation email")
+          }
+        } catch (emailError) {
+          console.error("Error sending confirmation email:", emailError)
+          // Continue with the flow even if email fails
+        }
+      }
+
       // Save the pet name for the success message
       const submittedPetName = petName
 
@@ -245,6 +290,7 @@ export default function Home() {
       setMedicationDetails("")
       setSupplementDetails("")
       setAppointmentConfirmation(null)
+      setEmail("")
 
       // Important: Set the cancelled state based on the stored value
       // This ensures the correct message is shown
@@ -373,6 +419,19 @@ export default function Home() {
               onChange={(e) => setOwnerName(e.target.value)}
               className="w-full px-3 py-2 bg-transparent border border-gray-700 rounded-sm text-white"
               required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="email" className="block text-sm">
+              email (optional):
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 bg-transparent border border-gray-700 rounded-sm text-white"
             />
           </div>
 
@@ -673,6 +732,19 @@ export default function Home() {
                   value={supplementDetails}
                   onChange={(e) => setSupplementDetails(e.target.value)}
                   className="w-full px-3 py-2 bg-transparent border border-gray-700 rounded-sm text-white min-h-[100px]"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="email" className="block text-sm">
+                  Email address:
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3 py-2 bg-transparent border border-gray-700 rounded-sm text-white"
                 />
               </div>
 
