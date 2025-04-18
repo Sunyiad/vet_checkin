@@ -1,14 +1,11 @@
 "use client"
 
-import { useState, useEffect, lazy } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClientSupabaseClient } from "@/lib/supabase"
 import { RefreshCw, UserPlus, FileText, Trash2, RotateCcw } from "lucide-react"
 import Link from "next/link"
 import { generateRandomCode } from "@/lib/utils"
-
-// Lazy load the ClinicOverview component
-const ClinicOverview = lazy(() => import("./clinic-overview"))
 
 // Update the Pet interface to include the new fields
 interface Pet {
