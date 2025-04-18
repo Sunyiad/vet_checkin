@@ -1,0 +1,380 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export interface Database {
+  public: {
+    Tables: {
+      admins: {
+        Row: {
+          id: string
+          password: string
+          email: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          password: string
+          email: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          password?: string
+          email?: string
+          created_at?: string
+        }
+      }
+      appointments: {
+        Row: {
+          created_at: string
+          updated_at: string
+          pet_id: string
+          id: string
+          notes: string | null
+          cancelled_reason: string | null
+          status: string
+          doctor: string | null
+          owner_name: string
+          pet_name: string
+          appointment_date: string
+          doctor_id: string | null
+          clinic_id: string
+          scheduled_date: string | null
+          completed_date: string | null
+          cancelled_date: string | null
+        }
+        Insert: {
+          created_at?: string
+          updated_at?: string
+          pet_id: string
+          id?: string
+          notes?: string | null
+          cancelled_reason?: string | null
+          status?: string
+          doctor?: string | null
+          owner_name: string
+          pet_name: string
+          appointment_date: string
+          doctor_id?: string | null
+          clinic_id: string
+          scheduled_date?: string | null
+          completed_date?: string | null
+          cancelled_date?: string | null
+        }
+        Update: {
+          created_at?: string
+          updated_at?: string
+          pet_id?: string
+          id?: string
+          notes?: string | null
+          cancelled_reason?: string | null
+          status?: string
+          doctor?: string | null
+          owner_name?: string
+          pet_name?: string
+          appointment_date?: string
+          doctor_id?: string | null
+          clinic_id?: string
+          scheduled_date?: string | null
+          completed_date?: string | null
+          cancelled_date?: string | null
+        }
+      }
+      clinic_signup_codes: {
+        Row: {
+          code: string
+          id: string
+          created_at: string
+          expires_at: string | null
+          used: boolean
+          clinic_name: string
+          clinic_email: string
+          created_by: string
+        }
+        Insert: {
+          code: string
+          id?: string
+          created_at?: string
+          expires_at?: string | null
+          used?: boolean
+          clinic_name: string
+          clinic_email: string
+          created_by: string
+        }
+        Update: {
+          code?: string
+          id?: string
+          created_at?: string
+          expires_at?: string | null
+          used?: boolean
+          clinic_name?: string
+          clinic_email?: string
+          created_by?: string
+        }
+      }
+      clinics: {
+        Row: {
+          id: string
+          name: string
+          contact_person: string | null
+          email: string
+          created_at: string
+          password?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          zip?: string | null
+          phone?: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          contact_person?: string | null
+          email: string
+          created_at?: string
+          password: string
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          zip?: string | null
+          phone?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          contact_person?: string | null
+          email?: string
+          created_at?: string
+          password?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          zip?: string | null
+          phone?: string | null
+        }
+      }
+      doctors: {
+        Row: {
+          id: string
+          name: string
+          clinic_id: string
+          created_at: string
+          updated_at: string | null
+          active: boolean
+        }
+        Insert: {
+          id?: string
+          name: string
+          clinic_id: string
+          created_at?: string
+          updated_at?: string | null
+          active?: boolean
+        }
+        Update: {
+          id?: string
+          name?: string
+          clinic_id?: string
+          created_at?: string
+          updated_at?: string | null
+          active?: boolean
+        }
+      }
+      pets: {
+        Row: {
+          id: string
+          owner_name: string
+          pet_name: string
+          species: string
+          is_sick: boolean
+          sick_appointment: boolean
+          general_info: string | null
+          coughing: boolean
+          sneezing: boolean
+          vomiting: boolean
+          diarrhea: boolean
+          clinic_id: string
+          created_at: string
+          updated_at: string | null
+          status: string
+          doctor_id: string | null
+          diet_info: string | null
+          prevention_type: string | null
+          discuss_risks: boolean | null
+          recent_vet_clinic: string | null
+          recent_vet_reason: string | null
+          records_permission: boolean | null
+          medication_details: string | null
+          supplement_details: string | null
+          cancelled: boolean
+          cancelled_doctor: string | null
+          cancelled_at: string | null
+        }
+        Insert: {
+          id?: string
+          owner_name: string
+          pet_name: string
+          species: string
+          is_sick: boolean
+          sick_appointment: boolean
+          general_info?: string | null
+          coughing: boolean
+          sneezing: boolean
+          vomiting: boolean
+          diarrhea: boolean
+          clinic_id: string
+          created_at?: string
+          updated_at?: string | null
+          status?: string
+          doctor_id?: string | null
+          diet_info?: string | null
+          prevention_type?: string | null
+          discuss_risks?: string | null
+          recent_vet_clinic?: string | null
+          recent_vet_reason?: string | null
+          records_permission?: string | null
+          medication_details?: string | null
+          supplement_details?: string | null
+          cancelled?: boolean
+          cancelled_doctor?: string | null
+          cancelled_at?: string | null
+        }
+        Update: {
+          id?: string
+          owner_name?: string
+          pet_name?: string
+          species?: string
+          is_sick?: boolean
+          sick_appointment?: boolean
+          general_info?: string | null
+          coughing?: boolean
+          sneezing?: boolean
+          vomiting?: boolean
+          diarrhea?: boolean
+          clinic_id?: string
+          created_at?: string
+          updated_at?: string | null
+          status?: string
+          doctor_id?: string | null
+          diet_info?: string | null
+          prevention_type?: string | null
+          discuss_risks?: string | null
+          recent_vet_clinic?: string | null
+          recent_vet_reason?: string | null
+          records_permission?: string | null
+          medication_details?: string | null
+          supplement_details?: string | null
+          cancelled?: boolean
+          cancelled_doctor?: string | null
+          cancelled_at?: string | null
+        }
+      }
+      codes: {
+        Row: {
+          id: string
+          code: string
+          clinic_id: string
+          created_at: string
+          expires_at: string
+          active: boolean
+        }
+        Insert: {
+          id?: string
+          code: string
+          clinic_id: string
+          created_at?: string
+          expires_at: string
+          active: boolean
+        }
+        Update: {
+          id?: string
+          code?: string
+          clinic_id?: string
+          created_at?: string
+          expires_at?: string
+          active?: boolean
+        }
+      }
+      password_reset_tokens: {
+        Row: {
+          id: string
+          clinic_id: string
+          token: string
+          expires_at: string
+          used: boolean
+        }
+        Insert: {
+          id?: string
+          clinic_id: string
+          token: string
+          expires_at: string
+          used?: boolean
+        }
+        Update: {
+          id?: string
+          clinic_id?: string
+          token?: string
+          expires_at?: string
+          used?: boolean
+        }
+      }
+    }
+    Views: {
+      [_ক্ট_]pet_checkin_view: {
+        Row: {
+          pet_name: string | null
+          owner_name: string | null
+          species: string | null
+          is_sick: boolean | null
+          general_info: string | null
+          coughing: boolean | null
+          sneezing: boolean | null
+          vomiting: boolean | null
+          diarrhea: boolean | null
+          doctor_name: string | null
+        }
+        Insert: {
+          pet_name?: string | null
+          owner_name?: string | null
+          species?: string | null
+          is_sick?: boolean | null
+          general_info?: string | null
+          coughing?: boolean | null
+          sneezing?: boolean | null
+          vomiting?: boolean | null
+          diarrhea?: boolean | null
+          doctor_name?: string | null
+        }
+        Update: {
+          pet_name?: string | null
+          owner_name?: string | null
+          species?: string | null
+          is_sick?: boolean | null
+          general_info?: string | null
+          coughing?: boolean | null
+          sneezing?: boolean | null
+          vomiting?: boolean | null
+          diarrhea?: boolean | null
+          doctor_name?: string | null
+        }
+      }
+    }
+    Functions: {
+      delete_clinic_cascade: {
+        Args: {
+          clinic_id_param: string
+          clinic_email_param: string
+        }
+        Returns: undefined
+      }
+      handle_new_user: {
+        Args: {}
+        Returns: string
+      }
+    }
+  }
+}

@@ -127,6 +127,9 @@ export default function Home() {
     e.preventDefault()
     setIsSubmitting(true)
 
+    // Store the current cancellation state to use after form submission
+    const isCancelled = cancelled
+
     try {
       const supabase = createClientSupabaseClient()
 
@@ -137,21 +140,17 @@ export default function Home() {
 
       // Get the selected doctor's name for reference
       const selectedDoctor = doctors.find((doctor) => doctor.id === selectedDoctorId)
-      const doctorName = selectedDoctor ? selectedDoctor.name : null
+      const doctorName = selectedDoctor ? selectedDoctor.name : "Not specified"
+      const currentTime = new Date().toISOString()
 
-      const { error } = await supabase.from("pets").insert({
+      // Create the pet data object
+      const petData: any = {
         owner_name: ownerName,
         pet_name: petName,
         species,
         is_sick: isSick,
         sick_appointment: isSick,
-        general_info: generalInfo,
-        coughing: symptoms.coughing,
-        sneezing: symptoms.sneezing,
-        vomiting: symptoms.vomiting,
-        diarrhea: symptoms.diarrhea,
         clinic_id: clinicId,
-        status: "active", // Set status to active for new pets
         doctor_id: selectedDoctorId,
         // New fields
         diet_info: dietInfo,
@@ -162,15 +161,65 @@ export default function Home() {
         records_permission: recentVetVisit ? recordsPermission : null,
         medication_details: medicationDetails,
         supplement_details: supplementDetails,
-        cancelled: cancelled,
-        cancelled_doctor: cancelled && doctorName ? doctorName : null,
-        cancelled_at: cancelled ? new Date().toISOString() : null,
-      })
+        // Set the status based on whether the appointment is cancelled
+        status: isCancelled ? "cancelled" : "active",
+        // Explicitly set the cancelled field
+        cancelled: isCancelled,
+      }
 
-      if (error) {
-        console.error("Error submitting form:", error)
+      // Only add cancelled_at and cancelled_doctor if the appointment is cancelled
+      if (isCancelled) {
+        petData.cancelled_at = currentTime
+        petData.cancelled_doctor = doctorName
+      }
+
+      // Add cancellation info to general_info if appointment is cancelled
+      if (isCancelled) {
+        petData.general_info = `CANCELLED APPOINTMENT - Doctor: ${doctorName} - ${new Date().toLocaleString()}${
+          generalInfo ? ` - Additional info: ${generalInfo}` : ""
+        }`
+      } else {
+        petData.general_info = generalInfo
+        petData.coughing = symptoms.coughing
+        petData.sneezing = symptoms.sneezing
+        petData.vomiting = symptoms.vomiting
+        petData.diarrhea = symptoms.diarrhea
+      }
+
+      // Insert into pets table
+      const { data: petResult, error: petError } = await supabase.from("pets").insert(petData).select()
+
+      if (petError) {
+        console.error("Error submitting form:", petError)
         return
       }
+
+      // Also insert into appointments table for better tracking
+      if (petResult && petResult.length > 0) {
+        const appointmentData = {
+          pet_name: petName,
+          owner_name: ownerName,
+          doctor: doctorName,
+          doctor_id: selectedDoctorId,
+          status: isCancelled ? "cancelled" : "active",
+          pet_id: petResult[0].id,
+          clinic_id: clinicId,
+          appointment_date: currentTime,
+          cancelled_date: isCancelled ? currentTime : null,
+          cancelled_reason: isCancelled ? "Client cancelled" : null,
+          notes: isCancelled ? `Cancelled by client on ${new Date().toLocaleString()}` : null,
+        }
+
+        const { error: appointmentError } = await supabase.from("appointments").insert(appointmentData)
+
+        if (appointmentError) {
+          console.error("Error creating appointment record:", appointmentError)
+          // Continue anyway since the pet record was created successfully
+        }
+      }
+
+      // Save the pet name for the success message
+      const submittedPetName = petName
 
       // Reset form and show success message
       setSubmitSuccess(true)
@@ -197,7 +246,15 @@ export default function Home() {
       setMedicationDetails("")
       setSupplementDetails("")
       setAppointmentConfirmation(null)
-      setCancelled(false)
+
+      // Important: Set the cancelled state based on the stored value
+      // This ensures the correct message is shown
+      setCancelled(isCancelled)
+
+      // If the appointment was cancelled, update the pet name in the success message
+      if (isCancelled) {
+        setPetName(submittedPetName)
+      }
     } catch (error) {
       console.error("Error:", error)
     } finally {
@@ -292,14 +349,14 @@ export default function Home() {
         </>
       ) : submitSuccess ? (
         <div className="w-full max-w-md text-center">
-          <h1 className="text-2xl font-bold mb-4">Check-in Successful!</h1>
+          <h1 className="text-2xl font-bold mb-4">{cancelled ? "Appointment Cancelled" : "Check-in Successful!"}</h1>
           <p className="mb-6 text-gray-400">
             {cancelled
-              ? `Your appointment has been cancelled. Thank you for letting us know.`
-              : `Your pet has been successfully checked in. The clinic staff will see you shortly.`}
+              ? `Your appointment for ${petName} has been cancelled. We hope to see you soon!`
+              : `Your pet ${petName} has been successfully checked in. The clinic staff will see you shortly.`}
           </p>
           <button onClick={resetForm} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-sm">
-            Check in another pet
+            {cancelled ? "Return to check-in" : "Check in another pet"}
           </button>
         </div>
       ) : (
@@ -406,11 +463,9 @@ export default function Home() {
 
           {/* Show cancellation message if appointment is cancelled */}
           {appointmentConfirmation === false && (
-            <div className="bg-red-900/30 border border-red-700 p-4 rounded-sm">
-              <p>
-                Sorry to hear you cannot make it today. Press submit to notify us. We hope to see you and{" "}
-                {petName || "your pet"} soon!
-              </p>
+            <div className="bg-red-900/30 border border-red-700 p-4 rounded-sm mb-4">
+              <p className="font-medium text-red-200 mb-2">Appointment Cancellation</p>
+              <p>Sorry to hear you cannot make it today. Press "Confirm Cancellation" below to notify the clinic.</p>
             </div>
           )}
 
@@ -708,9 +763,11 @@ export default function Home() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-sm"
+            className={`w-full py-2 ${
+              appointmentConfirmation === false ? "bg-red-800 hover:bg-red-700" : "bg-gray-800 hover:bg-gray-700"
+            } text-white rounded-sm`}
           >
-            {isSubmitting ? "Submitting..." : appointmentConfirmation === false ? "Cancel Appointment" : "Submit"}
+            {isSubmitting ? "Submitting..." : appointmentConfirmation === false ? "Confirm Cancellation" : "Submit"}
           </button>
         </form>
       )}
