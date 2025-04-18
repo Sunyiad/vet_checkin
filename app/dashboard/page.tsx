@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClientSupabaseClient } from "@/lib/supabase"
 import { RefreshCw, UserPlus, FileText, Trash2, RotateCcw } from "lucide-react"
@@ -107,7 +107,6 @@ export default function Dashboard() {
     }
   }, [initialized, clinicData])
 
-  // Optimize the fetchDoctors function
   const fetchDoctors = async () => {
     if (!clinicData || !clinicData.id) {
       console.error("Cannot fetch doctors: No clinic ID available")
@@ -117,10 +116,9 @@ export default function Dashboard() {
     try {
       const supabase = createClientSupabaseClient()
 
-      // Select only the fields we need
       const { data, error } = await supabase
         .from("doctors")
-        .select("id, name")
+        .select("*")
         .eq("clinic_id", clinicData.id)
         .eq("active", true)
         .order("name", { ascending: true })
@@ -136,7 +134,7 @@ export default function Dashboard() {
     }
   }
 
-  // Optimize the fetchPets function to be more efficient
+  // Update the fetchPets function to use the new viewFilter
   const fetchPets = async () => {
     if (!clinicData || !clinicData.id) {
       console.error("Cannot fetch pets: No clinic ID available")
@@ -144,29 +142,17 @@ export default function Dashboard() {
     }
 
     try {
-      setLoading(true)
       const supabase = createClientSupabaseClient()
 
-      // Select only the fields we need
-      const selectQuery = `
-      id, 
-      owner_name, 
-      pet_name, 
-      species, 
-      is_sick, 
-      status, 
-      cancelled, 
-      general_info,
-      doctor_id,
-      cancelled_doctor,
-      cancelled_at,
-      doctor:doctor_id (name)
-    `
-
-      // Build the query with proper filters
+      // Build the query
       let query = supabase
         .from("pets")
-        .select(selectQuery)
+        .select(`
+          *,
+          doctor:doctor_id (
+            name
+          )
+        `)
         .eq("clinic_id", clinicData.id)
         .order("created_at", { ascending: false })
 
@@ -176,8 +162,7 @@ export default function Dashboard() {
           query = query.eq("status", "deleted")
           break
         case "cancelled":
-          // More efficient OR condition
-          query = query.in("status", ["cancelled"]).or(`cancelled.eq.true`)
+          query = query.or(`status.eq.cancelled,cancelled.eq.true`)
           break
         case "active":
         default:
@@ -190,9 +175,6 @@ export default function Dashboard() {
         query = query.eq("doctor_id", selectedDoctorId)
       }
 
-      // Limit the number of results to improve performance
-      query = query.limit(100)
-
       const { data, error } = await query
 
       if (error) {
@@ -200,9 +182,10 @@ export default function Dashboard() {
         return
       }
 
+      console.log(`Fetched ${data?.length || 0} pets with filter: ${viewFilter}`)
       setPets(data || [])
 
-      // Initialize checked in status more efficiently
+      // Initialize checked in status
       const initialCheckedInStatus: Record<string, boolean> = {}
       data?.forEach((pet) => {
         initialCheckedInStatus[pet.id] = false
@@ -215,7 +198,6 @@ export default function Dashboard() {
     }
   }
 
-  // Optimize the fetchCurrentCode function
   const fetchCurrentCode = async () => {
     if (!clinicData || !clinicData.id) {
       console.error("Cannot fetch current code: No clinic ID available")
@@ -224,29 +206,30 @@ export default function Dashboard() {
 
     try {
       const supabase = createClientSupabaseClient()
-      const now = new Date().toISOString()
 
-      // Select only the fields we need
+      // Get the current active code
+      const now = new Date().toISOString()
       const { data, error } = await supabase
         .from("codes")
-        .select("id, code, expires_at")
+        .select("*")
         .eq("clinic_id", clinicData.id)
         .eq("active", true)
         .gt("expires_at", now)
         .order("created_at", { ascending: false })
         .limit(1)
-        .single()
 
-      if (error && error.code !== "PGRST116") {
+      if (error) {
         console.error("Error fetching code:", error)
-        setCurrentCode(null)
         return
       }
 
-      setCurrentCode(data || null)
+      if (data && data.length > 0) {
+        setCurrentCode(data[0])
+      } else {
+        setCurrentCode(null)
+      }
     } catch (error) {
       console.error("Error:", error)
-      setCurrentCode(null)
     }
   }
 
@@ -397,248 +380,402 @@ export default function Dashboard() {
 
   if (!initialized || !clinicData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-900 to-black">
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 rounded-full bg-blue-500 animate-pulse"></div>
+          <div className="w-4 h-4 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: "0.2s" }}></div>
+          <div className="w-4 h-4 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: "0.4s" }}></div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="flex justify-between items-start mb-8">
-        <div className="bg-black border border-gray-800 p-4 rounded-sm">
-          <h2 className="text-lg font-semibold mb-2">Daily Check-in Code</h2>
-          {currentCode ? (
-            <div className="space-y-2">
-              <p className="text-2xl font-bold">{currentCode.code}</p>
-              <p className="text-xs text-gray-400">Expires: {new Date(currentCode.expires_at).toLocaleString()}</p>
-            </div>
-          ) : (
-            <p className="text-gray-400">No active code</p>
-          )}
-          <button
-            onClick={generateNewCode}
-            disabled={generatingCode}
-            className="mt-4 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-sm flex items-center gap-2"
-          >
-            {generatingCode ? (
-              <>
-                <RefreshCw size={16} className="animate-spin" />
-                Generating...
-              </>
+    <div className="min-h-screen p-6 bg-gradient-to-b from-gray-900 to-black">
+      <div className="max-w-7xl mx-auto">
+        {/* Header section with code and navigation */}
+        <div className="flex flex-col md:flex-row justify-between items-start gap-6 mb-8">
+          {/* Daily Check-in Code Card */}
+          <div className="bg-gray-900/70 backdrop-blur-sm border border-gray-800 rounded-xl p-5 shadow-lg w-full md:w-auto min-w-[280px]">
+            <h2 className="text-lg font-semibold mb-3 text-white">Daily Check-in Code</h2>
+            {currentCode ? (
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <p className="text-3xl font-bold text-blue-400 tracking-wider font-mono">{currentCode.code}</p>
+                  <div className="ml-2 px-2 py-1 bg-green-900/50 text-green-400 text-xs rounded-full border border-green-700/50">
+                    Active
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Expires: {new Date(currentCode.expires_at).toLocaleString()}</p>
+              </div>
             ) : (
-              <>
-                <RefreshCw size={16} />
-                Generate New Code
-              </>
+              <div className="flex items-center space-x-2 text-gray-400 mb-4">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" x2="12" y1="8" y2="12" />
+                  <line x1="12" x2="12.01" y1="16" y2="16" />
+                </svg>
+                <p>No active code</p>
+              </div>
             )}
-          </button>
-        </div>
-
-        <div className="flex flex-col items-center gap-2">
-          <Link
-            href="/dashboard/codes"
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-sm w-full text-center"
-          >
-            Manage Codes
-          </Link>
-          <Link
-            href="/dashboard/doctors"
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-sm w-full text-center flex items-center justify-center gap-2"
-          >
-            <UserPlus size={16} />
-            Manage Doctors
-          </Link>
-          <Link
-            href="/dashboard/profile"
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-sm w-full text-center"
-          >
-            Clinic Profile
-          </Link>
-        </div>
-
-        <div className="text-right">
-          <p className="text-sm mb-2">
-            {clinicData?.name ? clinicData.name : clinicData?.email ? clinicData.email : "Logged in"}
-          </p>
-          <button onClick={handleLogout} className="text-sm hover:underline">
-            logout
-          </button>
-        </div>
-      </div>
-
-      {/* Debug message */}
-      {debugMessage && (
-        <div className="mb-4 p-3 bg-red-900/30 border border-red-700 rounded-sm">
-          <p className="text-red-200">{debugMessage}</p>
-        </div>
-      )}
-
-      {/* Simplified filter controls */}
-      <div className="mb-6 flex flex-wrap items-center gap-4">
-        {/* View filter */}
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">View:</label>
-          <div className="flex rounded-md overflow-hidden border border-gray-700">
             <button
-              onClick={() => setViewFilter("active")}
-              className={`px-4 py-2 ${
-                viewFilter === "active" ? "bg-green-600 text-white" : "bg-gray-800 hover:bg-gray-700"
-              }`}
+              onClick={generateNewCode}
+              disabled={generatingCode}
+              className="mt-4 w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200 flex items-center justify-center gap-2 shadow-md"
             >
-              Active
+              {generatingCode ? (
+                <>
+                  <RefreshCw size={16} className="animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={16} />
+                  Generate New Code
+                </>
+              )}
             </button>
-            <button
-              onClick={() => setViewFilter("cancelled")}
-              className={`px-4 py-2 ${
-                viewFilter === "cancelled" ? "bg-red-600 text-white" : "bg-gray-800 hover:bg-gray-700"
-              }`}
+          </div>
+
+          {/* Navigation Links */}
+          <div className="flex flex-col gap-2 w-full md:w-auto">
+            <Link
+              href="/dashboard/codes"
+              className="px-4 py-3 bg-gray-800/80 hover:bg-gray-700/80 text-white rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md border border-gray-700/50 w-full"
             >
-              Cancelled
-            </button>
-            <button
-              onClick={() => setViewFilter("deleted")}
-              className={`px-4 py-2 ${
-                viewFilter === "deleted" ? "bg-blue-600 text-white" : "bg-gray-800 hover:bg-gray-700"
-              }`}
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M9 5H2v7l6.29 6.29c.94.94 2.48.94 3.42 0l3.58-3.58c.94-.94.94-2.48 0-3.42L9 5Z" />
+                <path d="M6 9.01V9" />
+                <path d="m15 5 6.3 6.3a2.4 2.4 0 0 1 0 3.4L17 19" />
+              </svg>
+              Manage Codes
+            </Link>
+            <Link
+              href="/dashboard/doctors"
+              className="px-4 py-3 bg-gray-800/80 hover:bg-gray-700/80 text-white rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md border border-gray-700/50 w-full"
             >
-              Deleted
-            </button>
+              <UserPlus size={18} />
+              Manage Doctors
+            </Link>
+            <Link
+              href="/dashboard/profile"
+              className="px-4 py-3 bg-gray-800/80 hover:bg-gray-700/80 text-white rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 shadow-md border border-gray-700/50 w-full"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              Clinic Profile
+            </Link>
+          </div>
+
+          {/* Clinic Info */}
+          <div className="ml-auto text-right">
+            <div className="bg-gray-900/70 backdrop-blur-sm border border-gray-800 rounded-xl p-4 shadow-md">
+              <p className="text-sm mb-1 text-gray-300">Logged in as</p>
+              <p className="font-medium text-white mb-3">
+                {clinicData?.name ? clinicData.name : clinicData?.email ? clinicData.email : "Clinic Account"}
+              </p>
+              <button
+                onClick={handleLogout}
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors duration-200 flex items-center gap-1.5 ml-auto"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" x2="9" y1="12" y2="12" />
+                </svg>
+                Logout
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Doctor filter dropdown */}
-        <div className="flex items-center gap-2">
-          <label htmlFor="doctorFilter" className="text-sm font-medium">
-            Doctor:
-          </label>
-          <select
-            id="doctorFilter"
-            value={selectedDoctorId || ""}
-            onChange={(e) => handleDoctorFilterChange(e.target.value || null)}
-            className="px-3 py-2 bg-gray-900 border border-gray-700 rounded-sm text-white"
-            style={{ color: "white", backgroundColor: "#1a1a1a" }}
-          >
-            <option value="">All Doctors</option>
-            {doctors.map((doctor) => (
-              <option key={doctor.id} value={doctor.id}>
-                {doctor.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+        {/* Debug message */}
+        {debugMessage && (
+          <div className="mb-6 p-4 bg-red-900/30 border border-red-700/50 rounded-lg flex items-start gap-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-red-400 mt-0.5"
+            >
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+            </svg>
+            <p className="text-red-300">{debugMessage}</p>
+          </div>
+        )}
 
-      {loading ? (
-        <p>Loading...</p>
-      ) : (
-        <div className="flex">
-          <div className="flex-1">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left">
-                  <th className="pb-4">owner name</th>
-                  <th className="pb-4">pet name</th>
-                  <th className="pb-4">doctor</th>
-                  <th className="pb-4">status</th>
-                  <th className="pb-4">sick appointment</th>
-                  <th className="pb-4">general info</th>
-                  <th className="pb-4">details</th>
-                  <th className="pb-4"></th>
-                  <th className="pb-4"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {pets.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-4 text-center text-gray-400">
-                      No pets found
-                    </td>
+        {/* Filter controls */}
+        <div className="mb-6 flex flex-wrap items-center gap-4 bg-gray-900/50 p-4 rounded-lg border border-gray-800/50">
+          {/* View filter */}
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-300">View:</label>
+            <div className="flex rounded-md overflow-hidden border border-gray-700 shadow-md">
+              <button
+                onClick={() => setViewFilter("active")}
+                className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                  viewFilter === "active"
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-800/80 hover:bg-gray-700/80 text-gray-300"
+                }`}
+              >
+                Active
+              </button>
+              <button
+                onClick={() => setViewFilter("cancelled")}
+                className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                  viewFilter === "cancelled"
+                    ? "bg-red-600 text-white"
+                    : "bg-gray-800/80 hover:bg-gray-700/80 text-gray-300"
+                }`}
+              >
+                Cancelled
+              </button>
+              <button
+                onClick={() => setViewFilter("deleted")}
+                className={`px-4 py-2 text-sm font-medium transition-colors duration-200 ${
+                  viewFilter === "deleted"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-800/80 hover:bg-gray-700/80 text-gray-300"
+                }`}
+              >
+                Deleted
+              </button>
+            </div>
+          </div>
+
+          {/* Doctor filter dropdown */}
+          <div className="flex items-center gap-3 ml-auto">
+            <label htmlFor="doctorFilter" className="text-sm font-medium text-gray-300">
+              Doctor:
+            </label>
+            <div className="relative">
+              <select
+                id="doctorFilter"
+                value={selectedDoctorId || ""}
+                onChange={(e) => handleDoctorFilterChange(e.target.value || null)}
+                className="pl-4 pr-10 py-2 bg-gray-800/80 border border-gray-700 rounded-lg text-white appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+              >
+                <option value="">All Doctors</option>
+                {doctors.map((doctor) => (
+                  <option key={doctor.id} value={doctor.id}>
+                    {doctor.name}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="text-gray-400"
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pets Table */}
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="flex items-center space-x-2">
+              <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+              <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: "0.2s" }}></div>
+              <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" style={{ animationDelay: "0.4s" }}></div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gray-900/70 backdrop-blur-sm border border-gray-800 rounded-xl overflow-hidden shadow-lg">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-800/80 text-left">
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Owner Name</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Pet Name</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Doctor</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Status</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Sick Appointment</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">General Info</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Details</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Check In</th>
+                    <th className="px-4 py-3 text-sm font-medium text-gray-300">Action</th>
                   </tr>
-                ) : (
-                  pets.map((pet) => (
-                    <tr key={pet.id} className="border-t border-gray-800">
-                      <td className="py-4">{pet.owner_name}</td>
-                      <td className="py-4">{pet.pet_name}</td>
-                      <td className="py-4">{pet.doctor?.name || pet.cancelled_doctor || "-"}</td>
-                      <td className="py-4">
-                        {pet.cancelled || pet.status === "cancelled" ? (
-                          <span className="px-2 py-1 bg-red-900 text-red-100 rounded-sm text-xs">Cancelled</span>
-                        ) : pet.status === "deleted" ? (
-                          <span className="px-2 py-1 bg-gray-900 text-gray-100 rounded-sm text-xs">Deleted</span>
-                        ) : (
-                          <span className="px-2 py-1 bg-green-900 text-green-100 rounded-sm text-xs">Active</span>
-                        )}
-                      </td>
-                      <td className="py-4">
-                        {pet.cancelled || pet.status === "cancelled" || pet.status === "deleted" ? (
-                          <span className="text-gray-400">-</span>
-                        ) : pet.is_sick ? (
-                          "sick"
-                        ) : (
-                          "healthy"
-                        )}
-                      </td>
-                      <td className="py-4">{pet.general_info || "-"}</td>
-                      <td className="py-4">
-                        <Link
-                          href={`/dashboard/pets/${pet.id}`}
-                          className="p-2 border border-gray-600 rounded-sm hover:bg-gray-800 inline-flex items-center"
-                        >
-                          <FileText size={16} />
-                        </Link>
-                      </td>
-                      <td className="py-4">
-                        <button
-                          onClick={() => handleToggleCheckIn(pet.id)}
-                          className={`px-4 py-2 rounded-sm ${
-                            checkedInPets[pet.id]
-                              ? "bg-green-600 hover:bg-green-700 text-white"
-                              : "bg-gray-800 hover:bg-gray-700 text-white"
-                          }`}
-                          disabled={pet.cancelled || pet.status === "cancelled" || pet.status === "deleted"}
-                        >
-                          {checkedInPets[pet.id] ? "checked in" : "check in"}
-                        </button>
-                      </td>
-                      <td className="py-4">
-                        {viewFilter === "deleted" ? (
-                          <button
-                            onClick={() => handleRestorePet(pet.id)}
-                            className="px-4 py-2 bg-green-900 hover:bg-green-800 rounded-sm flex items-center gap-2"
+                </thead>
+                <tbody>
+                  {pets.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-8 text-center text-gray-400">
+                        <div className="flex flex-col items-center justify-center">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="mb-2"
                           >
-                            <RotateCcw size={16} />
-                            Restore
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleSoftDeletePet(pet.id)}
-                            disabled={isDeleting[pet.id]}
-                            className="px-4 py-2 bg-red-900 hover:bg-red-800 rounded-sm flex items-center gap-2"
-                            data-pet-id={pet.id}
-                          >
-                            {isDeleting[pet.id] ? (
-                              <>
-                                <RefreshCw size={16} className="animate-spin" />
-                                Deleting...
-                              </>
-                            ) : (
-                              <>
-                                <Trash2 size={16} />
-                                Delete
-                              </>
-                            )}
-                          </button>
-                        )}
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" x2="12" y1="8" y2="12" />
+                            <line x1="12" x2="12.01" y1="16" y2="16" />
+                          </svg>
+                          <p>No pets found with the current filters</p>
+                        </div>
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    pets.map((pet) => (
+                      <tr key={pet.id} className="border-t border-gray-800 hover:bg-gray-800/30 transition-colors">
+                        <td className="px-4 py-3 text-white">{pet.owner_name}</td>
+                        <td className="px-4 py-3 text-white">{pet.pet_name}</td>
+                        <td className="px-4 py-3 text-white">{pet.doctor?.name || pet.cancelled_doctor || "-"}</td>
+                        <td className="px-4 py-3">
+                          {pet.cancelled || pet.status === "cancelled" ? (
+                            <span className="px-2 py-1 bg-red-900/50 text-red-300 rounded-md text-xs font-medium border border-red-700/30">
+                              Cancelled
+                            </span>
+                          ) : pet.status === "deleted" ? (
+                            <span className="px-2 py-1 bg-gray-800/50 text-gray-300 rounded-md text-xs font-medium border border-gray-700/30">
+                              Deleted
+                            </span>
+                          ) : (
+                            <span className="px-2 py-1 bg-green-900/50 text-green-300 rounded-md text-xs font-medium border border-green-700/30">
+                              Active
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300">
+                          {pet.cancelled || pet.status === "cancelled" || pet.status === "deleted" ? (
+                            <span className="text-gray-500">-</span>
+                          ) : pet.is_sick ? (
+                            <span className="text-red-400">Sick</span>
+                          ) : (
+                            <span className="text-green-400">Healthy</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-300 max-w-[200px] truncate">
+                          {pet.general_info || <span className="text-gray-500">-</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/dashboard/pets/${pet.id}`}
+                            className="p-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg inline-flex items-center justify-center transition-colors"
+                          >
+                            <FileText size={16} className="text-blue-400" />
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => handleToggleCheckIn(pet.id)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                              checkedInPets[pet.id]
+                                ? "bg-green-600 hover:bg-green-700 text-white shadow-md"
+                                : "bg-gray-800 hover:bg-gray-700 text-white border border-gray-700"
+                            }`}
+                            disabled={pet.cancelled || pet.status === "cancelled" || pet.status === "deleted"}
+                          >
+                            {checkedInPets[pet.id] ? "Checked In" : "Check In"}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          {viewFilter === "deleted" ? (
+                            <button
+                              onClick={() => handleRestorePet(pet.id)}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-md"
+                            >
+                              <RotateCcw size={16} />
+                              Restore
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleSoftDeletePet(pet.id)}
+                              disabled={isDeleting[pet.id]}
+                              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-md"
+                              data-pet-id={pet.id}
+                            >
+                              {isDeleting[pet.id] ? (
+                                <>
+                                  <RefreshCw size={16} className="animate-spin" />
+                                  Deleting...
+                                </>
+                              ) : (
+                                <>
+                                  <Trash2 size={16} />
+                                  Delete
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }
